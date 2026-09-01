@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Repositories\JsonProductRepository;
+use App\Repositories\ProductRepository;
+use App\Storage\ProductFileStorage;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +14,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(ProductFileStorage::class, fn () => new ProductFileStorage(
+            config('products.storage_path'),
+        ));
+
+        $this->app->bind(ProductRepository::class, JsonProductRepository::class);
     }
 
     /**

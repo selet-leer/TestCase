@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Storage\ProductFileStorage;
 use Tests\TestCase;
 
 class ProductApiTest extends TestCase
@@ -13,10 +12,10 @@ class ProductApiTest extends TestCase
     {
         parent::setUp();
 
-        // Point the storage at an isolated file so the suite never touches
-        // the real production data file.
+        // Point tests at an isolated file so the suite never touches the
+        // real production data (config/products.php makes this swappable).
         $this->dataFile = storage_path('framework/testing/products.json');
-        $this->app->instance(ProductFileStorage::class, new ProductFileStorage($this->dataFile));
+        config(['products.storage_path' => $this->dataFile]);
         @unlink($this->dataFile);
     }
 

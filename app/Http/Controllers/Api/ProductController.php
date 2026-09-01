@@ -6,14 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreProductRequest;
 use App\Http\Requests\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
-use App\Storage\ProductFileStorage;
+use App\Repositories\ProductRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Response;
 
 class ProductController extends Controller
 {
-    public function __construct(private readonly ProductFileStorage $products)
+    public function __construct(private readonly ProductRepository $products)
     {
     }
 
