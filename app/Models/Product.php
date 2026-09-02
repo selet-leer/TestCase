@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Exceptions\InsufficientStockException;
+
 readonly class Product
 {
     public function __construct(
@@ -25,6 +27,26 @@ readonly class Product
             (int) $data['version'],
             $data['created_at'],
             $data['updated_at'],
+        );
+    }
+
+    /**
+     * @throws InsufficientStockException
+     */
+    public function withOrder(int $quantity): self
+    {
+        if ($this->stock < $quantity) {
+            throw new InsufficientStockException();
+        }
+
+        return new self(
+            id: $this->id,
+            name: $this->name,
+            price: $this->price,
+            stock: $this->stock - $quantity,
+            version: $this->version + 1,
+            createdAt: $this->createdAt,
+            updatedAt: now()->toISOString(),
         );
     }
 

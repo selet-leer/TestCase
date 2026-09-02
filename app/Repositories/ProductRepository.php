@@ -24,4 +24,6 @@ interface ProductRepository
     public function update(string $id, array $attributes): ?Product;
 
     public function delete(string $id): bool;
+
+    public function decrementStock(string $id, int $quantity): Product;
 }

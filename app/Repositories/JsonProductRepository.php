@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Exceptions\ProductNotFoundException;
 use App\Models\Product;
 use App\Storage\ProductFileStorage;
 use Illuminate\Support\Str;
@@ -36,75 +37,119 @@ readonly class JsonProductRepository implements ProductRepository
 
     public function create(array $attributes): Product
     {
-        $products = $this->all();
-        $now = now()->toISOString();
+        $this->storage->lock();
 
-        $product = new Product(
-            id: (string) Str::uuid(),
-            name: $attributes['name'],
-            price: $attributes['price'],
-            stock: $attributes['stock'],
-            version: 1,
-            createdAt: $now,
-            updatedAt: $now,
-        );
+        try {
+            $products = $this->all();
+            $now = now()->toISOString();
 
-        $products[] = $product;
-        $this->write($products);
+            $product = new Product(
+                id: (string) Str::uuid(),
+                name: $attributes['name'],
+                price: $attributes['price'],
+                stock: $attributes['stock'],
+                version: 1,
+                createdAt: $now,
+                updatedAt: $now,
+            );
 
-        return $product;
+            $products[] = $product;
+            $this->write($products);
+
+            return $product;
+        } finally {
+            $this->storage->unlock();
+        }
     }
 
     public function update(string $id, array $attributes): ?Product
     {
-        $products = $this->all();
+        $this->storage->lock();
 
-        foreach ($products as $index => $product) {
-            if ($product->id !== $id) {
-                continue;
+        try {
+            $products = $this->all();
+
+            foreach ($products as $index => $product) {
+                if ($product->id !== $id) {
+                    continue;
+                }
+
+                $updated = new Product(
+                    id: $product->id,
+                    name: $attributes['name'],
+                    price: $attributes['price'],
+                    stock: $attributes['stock'],
+                    version: $product->version + 1,
+                    createdAt: $product->createdAt,
+                    updatedAt: now()->toISOString(),
+                );
+
+                $products[$index] = $updated;
+                $this->write($products);
+
+                return $updated;
             }
 
-            $updated = new Product(
-                id: $product->id,
-                name: $attributes['name'],
-                price: $attributes['price'],
-                stock: $attributes['stock'],
-                version: $product->version + 1,
-                createdAt: $product->createdAt,
-                updatedAt: now()->toISOString(),
-            );
-
-            $products[$index] = $updated;
-            $this->write($products);
-
-            return $updated;
+            return null;
+        } finally {
+            $this->storage->unlock();
         }
-
-        return null;
     }
 
     public function delete(string $id): bool
     {
-        $products = $this->all();
-        $remaining = [];
-        $found = false;
+        $this->storage->lock();
 
-        foreach ($products as $product) {
-            if ($product->id === $id) {
-                $found = true;
-                continue;
+        try {
+            $products = $this->all();
+            $remaining = [];
+            $found = false;
+
+            foreach ($products as $product) {
+                if ($product->id === $id) {
+                    $found = true;
+                    continue;
+                }
+
+                $remaining[] = $product;
             }
 
-            $remaining[] = $product;
+            if (! $found) {
+                return false;
+            }
+
+            $this->write($remaining);
+
+            return true;
+        } finally {
+            $this->storage->unlock();
         }
+    }
 
-        if (! $found) {
-            return false;
+    public function decrementStock(string $id, int $quantity): Product
+    {
+        $this->storage->lock();
+
+        try {
+            $products = $this->all();
+
+            foreach ($products as $index => $product) {
+                if ($product->id !== $id) {
+                    continue;
+                }
+
+                $updated = $product->withOrder($quantity);
+
+                $products[$index] = $updated;
+                $this->write($products);
+
+                return $updated;
+            }
+
+            throw new ProductNotFoundException();
+        } finally {
+            $this->storage->unlock();
         }
-
-        $this->write($remaining);
-
-        return true;
     }
 
     /**
