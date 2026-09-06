@@ -1,8 +1,10 @@
 <?php
 
-namespace App\Repositories;
+namespace App\Interfaces;
 
 use App\Models\Product;
+use App\Queries\ProductQuery;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 interface ProductRepository
 {
@@ -10,6 +12,11 @@ interface ProductRepository
      * @return array<Product>
      */
     public function all(): array;
+
+    /**
+     * @return LengthAwarePaginator<Product>
+     */
+    public function paginate(ProductQuery $query): LengthAwarePaginator;
 
     public function find(string $id): ?Product;
 

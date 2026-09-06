@@ -31,7 +31,8 @@ class ProductApiTest extends TestCase
     {
         $this->getJson('/api/products')
             ->assertOk()
-            ->assertExactJson(['data' => []]);
+            ->assertJsonCount(0, 'data')
+            ->assertJsonPath('meta.total', 0);
     }
 
     public function test_it_creates_a_product(): void

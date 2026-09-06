@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\Product;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Product\IndexProductRequest;
 use App\Http\Requests\Product\StoreProductRequest;
 use App\Http\Requests\Product\UpdateProductRequest;
 use App\Http\Resources\ProductResource;
-use App\Repositories\ProductRepository;
+use App\Interfaces\ProductRepository;
+use App\Queries\ProductQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Http\Response;
@@ -17,9 +19,11 @@ class ProductController extends Controller
     {
     }
 
-    public function index(): JsonResource
+    public function index(IndexProductRequest $request): JsonResource
     {
-        return ProductResource::collection($this->products->all());
+        $products = $this->products->paginate(ProductQuery::fromRequest($request));
+
+        return ProductResource::collection($products);
     }
 
     public function show(string $id): JsonResource

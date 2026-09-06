@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
+use App\Interfaces\ProductRepository;
 use App\Repositories\JsonProductRepository;
-use App\Repositories\ProductRepository;
 use App\Storage\ProductFileStorage;
 use Illuminate\Support\ServiceProvider;
 

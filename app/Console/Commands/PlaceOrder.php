@@ -4,7 +4,7 @@ namespace App\Console\Commands;
 
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\ProductNotFoundException;
-use App\Repositories\ProductRepository;
+use App\Interfaces\ProductRepository;
 use Illuminate\Console\Command;
 
 class PlaceOrder extends Command

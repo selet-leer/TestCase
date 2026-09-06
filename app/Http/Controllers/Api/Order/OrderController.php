@@ -7,7 +7,7 @@ use App\Exceptions\ProductNotFoundException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Order\DecrementOrderRequest;
 use App\Http\Resources\ProductResource;
-use App\Repositories\ProductRepository;
+use App\Interfaces\ProductRepository;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class OrderController extends Controller
