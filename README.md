@@ -1,59 +1,99 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Product API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A small JSON-backed product catalogue built with Laravel 12. The whole catalogue lives in
+a single JSON file — there is no database — which makes concurrent writes the interesting
+part of the problem. See [DECISIONS.md](DECISIONS.md) for the reasoning behind the
+locking strategy, the query layer and the known limits of this approach.
 
-## About Laravel
+## Requirements
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Docker and Docker Compose. Nothing else — PHP and Composer run inside the container.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+To run it without Docker you need PHP 8.2+ and Composer locally.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Setup
 
-## Learning Laravel
+```bash
+cp .env.example .env
+docker compose up -d
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+The first start installs the Composer dependencies inside the container, so give it a
+minute. Then generate the application key:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+docker compose exec app php artisan key:generate
+```
 
-## Laravel Sponsors
+The API is now on **http://localhost:8000/api/products**.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+No migrations are needed: the catalogue is stored in `storage/app/data/products.json`,
+which is created on the first write. The path can be pointed elsewhere with
+`PRODUCTS_STORAGE_PATH` in `.env` — the test suite uses this to work on an isolated file.
 
-### Premium Partners
+## Running the tests
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+docker compose exec app php artisan test
+```
 
-## Contributing
+A single test class, or a single test:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+docker compose exec app php artisan test --filter=OrderApiTest
+docker compose exec app php artisan test --filter=OrderConcurrencyTest::test_50_concurrent_orders_never_oversell
+```
 
-## Code of Conduct
+Note that `OrderConcurrencyTest` takes roughly 30 seconds on its own: it spawns 50 real OS
+processes that contend on the same file lock, which is the point — see
+[DECISIONS.md](DECISIONS.md) for why threads or HTTP requests would not prove anything here.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+| Suite | Covers |
+| --- | --- |
+| `ProductApiTest` | CRUD endpoints, validation, status codes |
+| `OrderApiTest` | the order endpoint's HTTP contract (200 / 404 / 409 / 422) |
+| `OrderConcurrencyTest` | 50 concurrent orders never oversell |
+| `ProductQueryTest` | filtering, sorting, pagination |
 
-## Security Vulnerabilities
+## Endpoints
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/products` | list, filter, sort, paginate |
+| `POST` | `/api/products` | create |
+| `GET` | `/api/products/{id}` | read one |
+| `PUT` | `/api/products/{id}` | replace (all fields required) |
+| `DELETE` | `/api/products/{id}` | delete |
+| `POST` | `/api/products/{id}/orders` | order a quantity, decrements stock |
 
-## License
+A product is `{ id, name, price, stock, version, created_at, updated_at }`. `price` is an
+integer in minor units (cents); `version` is bumped on every write.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Querying the list
+
+```
+GET /api/products?filter[stock][gte]=1&filter[name][like]=cable&sort=-price,name&page=2&per_page=20
+```
+
+- **filter** — `filter[field][op]=value`, combined with AND.
+  Fields: `name`, `price`, `stock`, `version`.
+  Operators: `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `like`.
+- **sort** — comma-separated, `-` prefix for descending, e.g. `sort=-price,name`.
+- **page** / **per_page** — default 20, clamped to a maximum of 100.
+
+Unknown fields and operators are ignored rather than rejected. The response uses Laravel's
+standard paginator envelope (`data`, `links`, `meta`).
+
+### Status codes
+
+| Code | When |
+| --- | --- |
+| `200` | successful read, update or order |
+| `201` | product created |
+| `204` | product deleted |
+| `404` | product does not exist |
+| `409` | order rejected — the request is valid, but stock is insufficient |
+| `422` | validation failed |
+
+All errors are returned as JSON (`{"message": ...}`, plus `errors` for validation),
+regardless of the client's `Accept` header.
