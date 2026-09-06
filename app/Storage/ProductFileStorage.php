@@ -30,6 +30,9 @@ class ProductFileStorage
         }
 
         $decoded = json_decode(file_get_contents($this->path), true);
+        if(!is_array($decoded)) {
+            throw new RuntimeException('Product file is not readable.');
+        }
 
         return $decoded['products'] ?? [];
     }
@@ -46,11 +49,25 @@ class ProductFileStorage
             'products' => $products,
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
 
+        if($payload === false) {
+            throw new RuntimeException('Failed to create product file');
+        }
+
         // Write to a temp file first, then swap it in with an atomic rename so
         // a concurrent reader always sees a complete file, never a half-written one.
         $tmp = $this->path.'.tmp';
-        file_put_contents($tmp, $payload);
-        rename($tmp, $this->path);
+
+        if (file_put_contents($tmp, $payload) !== strlen($payload)) {
+            @unlink($tmp);
+
+            throw new RuntimeException("Unable to write {$tmp}.");
+        }
+
+        if (rename($tmp, $this->path) === false) {
+            @unlink($tmp);
+
+            throw new RuntimeException("Unable to move {$tmp} into place.");
+        }
     }
 
     private function ensureDirectory(): void
@@ -75,7 +92,10 @@ class ProductFileStorage
             throw new RuntimeException('Unable to open lock file.');
         }
 
-        flock($handle, LOCK_EX);
+        if(flock($handle, LOCK_EX) === false) {
+            throw new RuntimeException('Unable to lock file.');
+        }
+
 
         $this->lockHandle = $handle;
     }
